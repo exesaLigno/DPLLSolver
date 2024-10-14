@@ -3,6 +3,7 @@ from os import listdir
 from time import time
 from subprocess import run
 from json import dumps
+import re
 
 def mcs():
     return time() * 1000 * 1000
@@ -21,7 +22,7 @@ for test in tests:
     res = run(['./dpll', f'{folder}/{test}'], capture_output=True)
     success = res.returncode == 0
     if success:
-        output = res.stdout.decode().strip('\n').split('\n')
+        output = res.stdout #.decode().strip('\n').split('\n')
     else:
         output = ''
     results[f'{folder}/{test}'] = {'success': success, 'output': output}
@@ -36,6 +37,16 @@ UNSAT_tests = []
 unclear_tests = []
 
 for test in results:
+
+    results[test]['output'] = results[test]['output'].decode().strip('\n').split('\n')
+    newlines = []
+    for line in results[test]['output']:
+        line = line.replace('\x1b[0m', '').replace('\x1b[35m', '')
+        if line.startswith('>> debug from'):
+            line = re.findall(r'>> debug from <[\w\d_\-.]+::\d+>: ([^\n]+)', line)[0]
+        newlines.append(line)
+    results[test]['output'] = newlines
+
     if results[test]['success']: 
         succ_count += 1
 
