@@ -1,5 +1,7 @@
 dpll
-test*/
+# test*/
 .vscode
 *.zip
 *.tar.gz
+*.cnf
+*/*.cnf
