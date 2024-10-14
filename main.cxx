@@ -1,5 +1,6 @@
 #define DEBUG
 #include "dpll.hxx"
+#include "dprintf.hxx"
 #include <cstdio>
 
 int main(int argc, char** argv)
@@ -10,7 +11,12 @@ int main(int argc, char** argv)
     for (int f_no = 1; f_no < argc; f_no++)
     {
         auto solver = DPLLSolver();
-        auto err = solver.loadDIMACS(argv[f_no]);
+        if (solver.loadDIMACS(argv[f_no]) != DPLLSolver::ERROR::OK)
+        {
+            dprintf("Cannot load CNF from file %s\n", argv[f_no]);
+            continue;
+        }
+        
         auto result = solver.solve();
         
         switch (result)
