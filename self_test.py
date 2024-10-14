@@ -21,7 +21,7 @@ for test in tests:
     res = run(['./dpll', f'{folder}/{test}'], capture_output=True)
     success = res.returncode == 0
     if success:
-        output = res.stdout.decode().split('\n')[0]
+        output = res.stdout.decode().strip('\n').split('\n')
     else:
         output = ''
     results[f'{folder}/{test}'] = {'success': success, 'output': output}
@@ -38,10 +38,11 @@ unclear_tests = []
 for test in results:
     if results[test]['success']: 
         succ_count += 1
-        if results[test]['output'] == 'SAT':
-            SAT_tests.append(test)
-        elif results[test]['output'] == 'UNSAT':
+
+        if results[test]['output'][-1].endswith('UNSAT'):
             UNSAT_tests.append(test)
+        elif results[test]['output'][-1].endswith('SAT'):
+            SAT_tests.append(test)
         else:
             unclear_tests.append(test)
     else: err_count += 1
