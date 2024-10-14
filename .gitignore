@@ -1,5 +1,5 @@
 dpll
-# test*/
+*.json
 .vscode
 *.zip
 *.tar.gz
