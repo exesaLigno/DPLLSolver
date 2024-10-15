@@ -1,11 +1,10 @@
-#include <cstdint>
+#pragma once
 #include <list>
 #include <string>
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
-
-typedef int32_t Literal;
+#include "literal.hxx"
 
 class Clause
 {
