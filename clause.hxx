@@ -27,7 +27,6 @@ public:
 
     std::string ToString(bool zero_terminated);
 
-private:
     std::list<Literal> literals;
 };
 
