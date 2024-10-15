@@ -24,7 +24,7 @@ for test in tests:
     if success:
         output = res.stdout #.decode().strip('\n').split('\n')
     else:
-        output = ''
+        output = b''
     results[f'{folder}/{test}'] = {'success': success, 'output': output}
     
 duration = (mcs() - start) / 1000
