@@ -5,3 +5,4 @@ dpll
 *.tar.gz
 *.cnf
 */*.cnf
+*.txt
