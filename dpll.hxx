@@ -52,6 +52,10 @@ private:
     bool _removeSingular(char* literal);
     bool _propagateUnit();
 
+    bool _isPureLiteral(int literal);
+    bool _removeClausesWithLiteral(int literal);
+    bool _removeClausesWithPureLiteral();
+
     static long _readFile(char filename[], char** destination);
     static int _clauseSize(const char* clause);
     static void _removeContraLiteralFromClause(char* clause, char* literal);
@@ -345,6 +349,10 @@ bool DPLLSolver::_propagateUnit()
 
     return false;
 }
+
+bool DPLLSolver::_isPureLiteral(int literal) {}
+bool DPLLSolver::_removeClausesWithLiteral(int literal) {}
+bool DPLLSolver::_removeClausesWithPureLiteral() {}
 
 DPLLSolver::STATUS DPLLSolver::solve()
 {
