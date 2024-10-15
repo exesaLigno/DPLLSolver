@@ -6,3 +6,4 @@ dpll
 *.cnf
 */*.cnf
 *.txt
+*_validate.py
