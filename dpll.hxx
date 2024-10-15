@@ -1,4 +1,5 @@
 #include "dprintf.hxx"
+#include "clause.hxx"
 #include <cstdint>
 #include <fstream>
 #include <cstring>
@@ -8,15 +9,6 @@ class DPLLSolver
 {
 public:
 
-    enum class RULE : uint8_t
-    {
-        EMPTY = 0,
-        TAUTOLOGIES_REMOVAL = 1,
-        UNIT_PROPAGATE = 2,
-        PURE_EXCLUSION = 4,
-        MASK = 7
-    };
-
     enum class ERROR : uint8_t
     {
         OK, FILE_NOT_FOUND, CORRUPTED_DATA, UNSUPPORTED_FORMAT, MULTIPLE_HEADERS
@@ -24,44 +16,35 @@ public:
 
     enum class STATUS : uint8_t
     {
-        UNKNOWN, SAT, UNSAT
+        UNKNOWN, EARLY_SAT, EARLY_UNSAT, SAT, UNSAT
+    };
+
+    enum class STEP_RESULT : uint8_t
+    {
+        OK, CLAUSE_EXHAUSTED, FORMULA_EXHAUSTED
     };
 
     DPLLSolver();
-    DPLLSolver(RULE rules);
     ERROR loadDIMACS(char filename[]);
     STATUS solve();
     ~DPLLSolver();
 
 
-private:
-
-    RULE _rules = RULE::EMPTY;
-    
+private:    
     char* _cnf_text = nullptr;
 
     int _variables_count = 0;
     int _clauses_count = 0;
-    char** _clauses = nullptr;
+    Clause** _clauses = nullptr;
 
-    int _singular_clauses_count = 0;
-    char** _singular_clauses = nullptr;
+    std::list<Clause*> _formula;
+    std::list<Clause*> _singular_clauses;
 
-    void _removeTrivialClauses();
-
-    bool _removeSingular(char* literal);
-    bool _propagateUnit();
-
-    bool _isPureLiteral(int literal);
-    bool _removeClausesWithLiteral(int literal);
-    bool _removeClausesWithPureLiteral();
+    STEP_RESULT _removeTrivialClauses();
+    STEP_RESULT _propagateUnit();
+    STEP_RESULT _removePureClauses();
 
     static long _readFile(char filename[], char** destination);
-    static int _clauseSize(const char* clause);
-    static void _removeContraLiteralFromClause(char* clause, char* literal);
-    static bool _clauseContainsLiteral(char* clause, char* literal);
-    static bool _clauseContainsContraLiteral(char* clause, char* literal);
-    static bool _isTrivialClause(char* clause);
 };
 
 long DPLLSolver::_readFile(char filename[], char** destination)
@@ -77,134 +60,7 @@ long DPLLSolver::_readFile(char filename[], char** destination)
     return text_length;
 }
 
-bool DPLLSolver::_clauseContainsLiteral(char* clause, char* literal)
-{
-    int literal_len = strchr(literal, ' ') - literal;
-    char* clause_literal_start = clause;
-    while (clause_literal_start)
-    {
-        char* end = strchr(clause_literal_start, ' ');
-        if (!end) break;
-
-        int clause_literal_len = end - clause_literal_start;
-        if (clause_literal_len == literal_len and !strncmp(clause_literal_start, literal, literal_len))
-            return true;
-
-        while (*end == ' ') end++;
-        clause_literal_start = end;
-    }
-
-    return false;
-}
-
-bool DPLLSolver::_clauseContainsContraLiteral(char* clause, char* literal)
-{
-    if (*literal == '-')
-        return _clauseContainsLiteral(clause, literal + 1);
-
-    else
-    {
-        // Dirty hack: in our case literal always have previous sym allocated in ram, so...
-        char tmp = literal[-1];
-        literal[-1] = '-';
-        bool result = _clauseContainsLiteral(clause, literal - 1);
-        literal[-1] = tmp;
-        return result;
-    }
-}
-
-void DPLLSolver::_removeContraLiteralFromClause(char* clause, char* literal)
-{
-    int literal_len = strchr(literal, ' ') - literal;
-    bool is_negative = *literal == '-';
-    char tmp_end = literal[literal_len];
-    literal[literal_len] = '\0';
-
-    char* removing_part = strstr(clause, is_negative ? literal + 1 : literal);
-    while (removing_part != nullptr)
-    {
-        if (removing_part[is_negative ? literal_len - 1 : literal_len] == ' ' and
-            ((is_negative and (removing_part == clause or removing_part[-1] == ' ')) or 
-            (not is_negative and removing_part[-1] == '-')))
-        {
-            char* old_p = removing_part + (is_negative ? literal_len : literal_len + 1);
-            char* new_p = is_negative ? removing_part : removing_part - 1;
-            while (*old_p != '\0')
-            {
-                char tmp = *old_p;
-                *(old_p++) = '\0';
-                *(new_p++) = tmp;
-            }
-            while (*new_p != '\0')
-                *(new_p++) = '\0';
-            break;
-        }
-
-        removing_part = strstr(removing_part + 1, is_negative ? literal + 1 : literal);
-    }
-
-    literal[literal_len] = tmp_end;
-}
-
-int DPLLSolver::_clauseSize(const char* clause)
-{
-    int size = 0;
-    bool in_variable = false;
-    for (int i = 0; clause[i] != '\0'; i++)
-    {
-        if (not in_variable and clause[i] == '0') break;
-        else if (not in_variable and ((clause[i] >= '0' and clause[i] <= '9') or clause[i] == '-'))
-        {
-            size++;
-            in_variable = true;
-        }
-        else if (in_variable and (clause[i] == ' ' or clause[i] == '\t'))
-            in_variable = false;
-    }
-
-    return size;
-}
-
-bool DPLLSolver::_isTrivialClause(char* clause)
-{
-    std::vector<int> mentioned_literals;
-
-    bool in_variable = false;
-    char* literal_start = nullptr;
-    for (int i = 0; clause[i] != '\0'; i++)
-    {
-        if (not in_variable and clause[i] == '0') break;
-
-        // One of contraliterals must be with leading '-'
-        else if (not in_variable and ((clause[i] >= '0' and clause[i] <= '9') or clause[i] == '-'))
-        {
-            literal_start = clause + i;
-            in_variable = true;
-        }
-        else if (in_variable and (clause[i] == ' ' or clause[i] == '\t'))
-        {
-            char tmp = clause[i];
-            clause[i] = '\0';
-            int current = atoi(literal_start);
-            clause[i] = tmp;
-
-            for (int mentioned : mentioned_literals)
-            {
-                if (mentioned + current == 0)
-                    return true;
-            }
-
-            mentioned_literals.push_back(current);
-            in_variable = false;
-        }
-    }
-
-    return false;
-}
-
-DPLLSolver::DPLLSolver() : _rules(DPLLSolver::RULE::EMPTY) {}
-
-DPLLSolver::DPLLSolver(RULE rules) : _rules(rules) {}
+DPLLSolver::DPLLSolver() {}
 
 DPLLSolver::ERROR DPLLSolver::loadDIMACS(char filename[])
 {
@@ -233,8 +89,7 @@ DPLLSolver::ERROR DPLLSolver::loadDIMACS(char filename[])
                 header_presented = true;
                 sscanf(_cnf_text + current_line, "p cnf %d %d", &_variables_count, &_clauses_count);
                 dprintf("Readed header: %d vars and %d clauses\n", _variables_count, _clauses_count);
-                _clauses = new char*[_clauses_count]{0};
-                _singular_clauses = new char*[_clauses_count]{0};
+                _clauses = new Clause*[_clauses_count]{0};
             }
             else if (clause_counter < _clauses_count)
             {
@@ -244,9 +99,11 @@ DPLLSolver::ERROR DPLLSolver::loadDIMACS(char filename[])
                     return DPLLSolver::ERROR::UNSUPPORTED_FORMAT;
                 }
 
-                _clauses[clause_counter++] = _cnf_text + current_line;
-                if (_clauseSize(_cnf_text + current_line) == 1)
-                    _singular_clauses[_singular_clauses_count++] = _cnf_text + current_line;
+                auto clause = new Clause(_cnf_text + current_line);
+                _clauses[clause_counter++] = clause;
+                _formula.push_back(clause);
+                if (clause->Singular())
+                    _singular_clauses.push_back(clause);
             }
 
             current_line = current_sym + 1;
@@ -259,118 +116,108 @@ DPLLSolver::ERROR DPLLSolver::loadDIMACS(char filename[])
 
     debug
     {
-        for (int i = 0; i < _clauses_count; i++)
-            dprintf("Clause %d: '%s' (size: %d)\n", i + 1, _clauses[i], _clauseSize(_clauses[i]));
+        int i = 1;
+        dprintf("┍━Current formula\n", nullptr);
+        for (auto clause : _formula)
+            dprintf("│     Clause %d: [%s] (size: %d)\n", i++, clause->ToString().c_str(), clause->Size());
 
-        dprintf("Formula contains %d singular clauses of %d clauses\n", _singular_clauses_count, _clauses_count);
+        dprintf("┕━Formula contains %d singular clauses of %d clauses\n", _singular_clauses.size(), _formula.size());
     }
 
     return DPLLSolver::ERROR::OK;
 }
 
-void DPLLSolver::_removeTrivialClauses()
+DPLLSolver::STEP_RESULT DPLLSolver::_removeTrivialClauses()
 {
-    int new_clauses_count = 0;
+    dprintf("┍━Removing trivial clauses from formula of %d clauses\n", _formula.size());
+    _formula.remove_if([](Clause* clause) { return clause->Trivial(); });
+    dprintf("┕━After removing formula consists of %d clauses\n", _formula.size());
 
-    for (int old_idx = 0, new_idx = 0; old_idx < _clauses_count; old_idx++)
-    {
-        if (_isTrivialClause(_clauses[old_idx]))
-        {
-            dprintf("Removed trivial clause %s\n", _clauses[old_idx]);
-            continue; // Just skipping such clauses (they will be deleted)
-        }
-
-        new_clauses_count++;
-        char* tmp = _clauses[old_idx];
-        _clauses[old_idx] = nullptr;
-        _clauses[new_idx++] = tmp;
-    }
-
-    _clauses_count = new_clauses_count;
+    return _formula.size() == 0 ? STEP_RESULT::FORMULA_EXHAUSTED : STEP_RESULT::OK;
 }
 
-bool DPLLSolver::_removeSingular(char* literal)
+DPLLSolver::STEP_RESULT DPLLSolver::_propagateUnit()
 {
-    int new_clauses_count = 0;
-
-    for (int old_idx = 0, new_idx = 0; old_idx < _clauses_count; old_idx++)
+    while (_singular_clauses.size() > 0)
     {
-        if (_clauseContainsLiteral(_clauses[old_idx], literal)) 
-            continue; // Just skipping such clauses (they will be deleted)
+        Literal propagating_literal = _singular_clauses.back()->SingleLiteral();
+        _singular_clauses.pop_back();
 
-        else if (_clauseContainsContraLiteral(_clauses[old_idx], literal))
+        // Removing all clauses that contains 
+        dprintf("┍━Propagating literal '%d' in formula of %d clauses\n", propagating_literal, _formula.size());
+        _formula.remove_if(
+            [propagating_literal](Clause* clause) 
+            { 
+                return clause->Contains(propagating_literal); 
+            }
+        );
+        dprintf("│     After removing clauses formula contains %d clauses\n", _formula.size())
+
+        // Removing contra-literal from all formulas that contains it
+        for (auto clause : _formula)
         {
-            dprintf("%s contains contraliteral for %s\n", _clauses[old_idx], literal);
-            _removeContraLiteralFromClause(_clauses[old_idx], literal);
-            if (_clauseSize(_clauses[old_idx]) == 1)
-                _singular_clauses[_singular_clauses_count++] = _clauses[old_idx];
-            dprintf("New clause: %s\n", _clauses[old_idx]);
+            if (clause->Contains(-propagating_literal))
+            {
+                dprintf("│     Removing literal '%d' from clause [%s]\n", -propagating_literal, clause->ToString().c_str())
+                clause->RemoveLiteral(-propagating_literal);
 
-            if (_clauseSize(_clauses[old_idx]) == 0)
-                return true;
+                if (clause->Singular())
+                {
+                    dprintf("│     Added clause [%s] to singular\n", clause->ToString().c_str());
+                    _singular_clauses.push_back(clause);
+                }
+
+                else if (clause->Empty())
+                {
+                    dprintf("│     Empty clause created while removing literal '%d'\n", propagating_literal);
+                    dprintf("┕━Early exit (empty clause)\n", nullptr);
+                    return STEP_RESULT::CLAUSE_EXHAUSTED;
+                }
+            }
         }
 
-        new_clauses_count++;
-        char* tmp = _clauses[old_idx];
-        _clauses[old_idx] = nullptr;
-        _clauses[new_idx++] = tmp;
+        dprintf("┕━Everything done for literal '%d'\n", propagating_literal);
     }
 
-    _clauses_count = new_clauses_count;
-
-    return false;
+    return _formula.size() == 0 ? STEP_RESULT::FORMULA_EXHAUSTED : STEP_RESULT::OK;
 }
 
-bool DPLLSolver::_propagateUnit()
+DPLLSolver::STEP_RESULT DPLLSolver::_removePureClauses()
 {
-    while (_singular_clauses_count > 0)
-    {
-        _singular_clauses_count--;
-        char* clause_to_propagate = _singular_clauses[_singular_clauses_count];
-        _singular_clauses[_singular_clauses_count] = nullptr;
-
-        dprintf("Removing clause '%s'\n", clause_to_propagate);
-        bool empty_clause_presented = _removeSingular(clause_to_propagate);
-        if (empty_clause_presented)
-        {
-            dprintf("Empty clause appeared while removing %s\n", clause_to_propagate);
-            return empty_clause_presented;
-        }
-        dprintf("After removing formula contains %d singular clauses of %d clauses\n", _singular_clauses_count, _clauses_count);
-
-        debug
-        {
-            for (int i = 0; i < _clauses_count; i++)
-                dprintf("Clause %d: '%s' (size: %d)\n", i + 1, _clauses[i], _clauseSize(_clauses[i]));
-
-            dprintf("Formula contains %d singular clauses of %d clauses\n", _singular_clauses_count, _clauses_count);
-        }
-    }
-
-    return false;
+    return _formula.size() == 0 ? STEP_RESULT::FORMULA_EXHAUSTED : STEP_RESULT::OK;
 }
-
-bool DPLLSolver::_isPureLiteral(int literal) {}
-bool DPLLSolver::_removeClausesWithLiteral(int literal) {}
-bool DPLLSolver::_removeClausesWithPureLiteral() {}
 
 DPLLSolver::STATUS DPLLSolver::solve()
 {
-    _removeTrivialClauses();
-    bool empty_clause_presented = _propagateUnit();
+    STEP_RESULT res = STEP_RESULT::OK;
+    if (STEP_RESULT::OK != (res = _removeTrivialClauses())) goto exit;
+    if (STEP_RESULT::OK != (res = _propagateUnit())) goto exit;
+    if (STEP_RESULT::OK != (res = _removePureClauses())) goto exit;
 
+exit:
     debug
     {
-        for (int i = 0; i < _clauses_count; i++)
-            dprintf("Clause %d: '%s' (size: %d)\n", i + 1, _clauses[i], _clauseSize(_clauses[i]));
+        int i = 1;
+        dprintf("┍━Final formula (res = %s)\n", res == STEP_RESULT::OK ? "OK" : 
+                                                res == STEP_RESULT::FORMULA_EXHAUSTED ? "FORMULA_EXHAUSTED" :
+                                                res == STEP_RESULT::CLAUSE_EXHAUSTED ? "CLAUSE_EXHAUSTED" :
+                                                "Unknown");
+        for (auto clause : _formula)
+            dprintf("│     Clause %d: [%s] (size: %d)\n", i++, clause->ToString().c_str(), clause->Size());
 
-        dprintf("Formula contains %d singular clauses of %d clauses\n", _singular_clauses_count, _clauses_count);
+        dprintf("┕━Formula contains %d singular clauses of %d clauses\n", _singular_clauses.size(), _formula.size());
     }
 
-    if (_clauses_count == 0 and not empty_clause_presented)
-        return DPLLSolver::STATUS::SAT;
-    else
-        return DPLLSolver::STATUS::UNSAT;
+    switch (res)
+    {
+        case STEP_RESULT::FORMULA_EXHAUSTED:
+            return STATUS::SAT;
+        case STEP_RESULT::CLAUSE_EXHAUSTED:
+            return STATUS::UNSAT;
+        default:
+            return _formula.size() == 0 ? STATUS::SAT : STATUS::UNSAT;
+    }
+
     return DPLLSolver::STATUS::UNKNOWN;
 }
 
@@ -378,19 +225,22 @@ DPLLSolver::~DPLLSolver()
 {
     if (_clauses)
     {
+        for (int i = 0; i < _clauses_count; i++)
+        {
+            if (_clauses[i])
+            {
+                delete _clauses[i];
+                _clauses[i] = nullptr;
+            }
+        }
         delete[] _clauses;
         _clauses = nullptr;
+        _clauses_count = 0;
     }
 
     if (_cnf_text)
     {
         delete[] _cnf_text;
         _cnf_text = nullptr;
-    }
-
-    if (_singular_clauses)
-    {
-        delete[] _singular_clauses;
-        _singular_clauses = nullptr;
     }
 }
