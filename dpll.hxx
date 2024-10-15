@@ -1,5 +1,7 @@
 #include "dprintf.hxx"
+#include "literal.hxx"
 #include "clause.hxx"
+#include "literal_storage.hxx"
 #include <cstdint>
 #include <fstream>
 #include <cstring>
@@ -34,6 +36,8 @@ private:
     char* _cnf_text = nullptr;
 
     int _variables_count = 0;
+    LiteralStorage _literal_storage;
+
     int _clauses_count = 0;
     Clause** _clauses = nullptr;
 
@@ -42,6 +46,7 @@ private:
 
     STEP_RESULT _removeTrivialClauses();
     STEP_RESULT _propagateUnit();
+    void _applyLiteralsSummary();
     STEP_RESULT _removePureClauses();
 
     static long _readFile(char filename[], char** destination);
@@ -60,7 +65,7 @@ long DPLLSolver::_readFile(char filename[], char** destination)
     return text_length;
 }
 
-DPLLSolver::DPLLSolver() {}
+DPLLSolver::DPLLSolver() { }
 
 DPLLSolver::ERROR DPLLSolver::loadDIMACS(char filename[])
 {
@@ -90,6 +95,7 @@ DPLLSolver::ERROR DPLLSolver::loadDIMACS(char filename[])
                 sscanf(_cnf_text + current_line, "p cnf %d %d", &_variables_count, &_clauses_count);
                 dprintf("Readed header: %d vars and %d clauses\n", _variables_count, _clauses_count);
                 _clauses = new Clause*[_clauses_count]{0};
+                _literal_storage.Allocate(_variables_count);
             }
             else if (clause_counter < _clauses_count)
             {
@@ -182,8 +188,41 @@ DPLLSolver::STEP_RESULT DPLLSolver::_propagateUnit()
     return _formula.size() == 0 ? STEP_RESULT::FORMULA_EXHAUSTED : STEP_RESULT::OK;
 }
 
+void DPLLSolver::_applyLiteralsSummary()
+{
+    _literal_storage.Reset();
+
+    for (auto clause : _formula)
+    {
+        for (auto literal : clause->literals)
+            _literal_storage.SetUsage(literal);
+    }
+}
+
 DPLLSolver::STEP_RESULT DPLLSolver::_removePureClauses()
 {
+    dprintf("┍━Removing clauses with pure literals\n", nullptr);
+    _applyLiteralsSummary();
+
+    while (_literal_storage.PureCount() > 0)
+    {
+        dprintf("│     Found %d pure literals in formula of %d clauses\n", _literal_storage.PureCount(), _formula.size());
+        for (Literal literal = 1; literal <= _variables_count; literal++)
+        {
+            if (_literal_storage.Pure(literal))
+                _formula.remove_if(
+                    [literal](Clause* clause) 
+                    { 
+                        return clause->Contains(literal) or clause->Contains(-literal); 
+                    }
+                );
+        }
+        dprintf("│     After removing formula contains of %d clauses\n", _formula.size());
+
+        _applyLiteralsSummary();
+    }
+    dprintf("┕━All pure literals removed. Formula contains %d clauses\n", _formula.size());
+
     return _formula.size() == 0 ? STEP_RESULT::FORMULA_EXHAUSTED : STEP_RESULT::OK;
 }
 
