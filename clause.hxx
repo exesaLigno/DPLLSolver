@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <list>
+#include <string>
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
@@ -15,14 +16,17 @@ public:
     //~Clause(); /// Clause destructor
 
     int Size();
+    bool Singular();
     bool Contains(Literal other);
     bool Contains(Clause& other);
     bool Trivial();
     bool Empty();
 
+    Literal SingleLiteral();
+
     void RemoveLiteral(Literal literal);
 
-    void Print(bool zero_terminated);
+    std::string ToString(bool zero_terminated);
 
 private:
     std::list<Literal> literals;
@@ -66,6 +70,11 @@ int Clause::Size()
     return literals.size();
 }
 
+bool Clause::Singular()
+{
+    return literals.size() == 1;
+}
+
 bool Clause::Contains(Literal other)
 {
     for (auto literal : literals)
@@ -104,16 +113,34 @@ bool Clause::Empty()
     return literals.empty();
 }
 
+Literal Clause::SingleLiteral()
+{
+    if (Singular())
+        return literals.back();
+    return 0;
+}
+
 void Clause::RemoveLiteral(Literal literal)
 {
     literals.remove(literal);
 }
 
-void Clause::Print(bool zero_terminated = false)
+std::string Clause::ToString(bool zero_terminated = false)
 {
-    for (auto literal : literals)
-        printf("%d ", literal);
+    char buffer[50] = { 0 };
+    std::string result = "";
 
-    printf(zero_terminated ? "0\n" : "\n");
+    for (auto literal : literals)
+    {
+        sprintf(buffer, "%d ", literal);
+        result = result.append(buffer);
+    }
+
+    result.pop_back();
+
+    if (zero_terminated)
+        result = result.append(" 0");
+
+    return result;
 }
 
