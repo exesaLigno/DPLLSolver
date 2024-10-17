@@ -1,6 +1,8 @@
 #define DEBUG
-#include "dpll.hxx"
+#include "solver.hxx"
 #include "dprintf.hxx"
+#include "dimacs.hxx"
+#include "cnf.hxx"
 #include <cstdio>
 
 int main(int argc, char** argv)
@@ -9,26 +11,23 @@ int main(int argc, char** argv)
         dprintf("Filename isn't provided!\nUsage: %s [filename, ..]\n", argv[0]);
 
     int err_count = 0;
+    auto solver = Solver();
 
     for (int f_no = 1; f_no < argc; f_no++)
     {
-        auto solver = DPLLSolver();
-        if (solver.loadDIMACS(argv[f_no]) != DPLLSolver::ERROR::OK)
-        {
-            dprintf("Cannot load CNF from file %s\n", argv[f_no]);
-            err_count++;
-            continue;
-        }
+        CNF cnf = DIMACS::ReadFromFile(argv[f_no]);
+
+        dprintf("Loaded %s\nCNF consist of %d clauses\n%s\n", argv[f_no], cnf.ClausesCount(), cnf.ToString().c_str());
         
-        auto result = solver.solve();
+        auto result = solver.DPLLRecursive(cnf);
         
         switch (result)
         {
-            case DPLLSolver::STATUS::UNKNOWN:
+            case Solver::Status::UNKNOWN:
                 printf("UNKOWN\n"); break;
-            case DPLLSolver::STATUS::SAT:
+            case Solver::Status::SAT:
                 printf("SAT\n"); break;
-            case DPLLSolver::STATUS::UNSAT:
+            case Solver::Status::UNSAT:
                 printf("UNSAT\n"); break;
             default:
                 printf("Unreachable");
