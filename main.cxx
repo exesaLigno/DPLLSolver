@@ -1,4 +1,3 @@
-#define DEBUG
 #include "solver.hxx"
 #include "dprintf.hxx"
 #include "dimacs.hxx"
@@ -11,7 +10,7 @@ int main(int argc, char** argv)
         dprintf("Filename isn't provided!\nUsage: %s [filename, ..]\n", argv[0]);
 
     int err_count = 0;
-    auto solver = Solver();
+    auto solver = Solver(Rule::REMOVE_SINGULAR /*| Rule::REMOVE_PURE*/);
 
     for (int f_no = 1; f_no < argc; f_no++)
     {
