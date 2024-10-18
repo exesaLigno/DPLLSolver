@@ -8,3 +8,4 @@ dpll
 *.txt
 *_validate.py
 *.png
+perf.*
