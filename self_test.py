@@ -54,12 +54,12 @@ for test in results:
 
         if results[test]['output'][-1].endswith('UNSAT'):
             UNSAT_tests.append(test)
-            if test.split('/')[-1].lower().startswith('unsat') or test.lower().startswith('uuf'): passed += 1
+            if test.split('/')[-1].lower().startswith('unsat') or test.split('/')[-1].lower().startswith('uuf'): passed += 1
             else: failed += 1
 
         elif results[test]['output'][-1].endswith('SAT'):
             SAT_tests.append(test)
-            if test.split('/')[-1].lower().startswith('sat') or test.lower().startswith('uf'): passed += 1
+            if test.split('/')[-1].lower().startswith('sat') or test.split('/')[-1].lower().startswith('uf'): passed += 1
             else: failed += 1
 
         else:
