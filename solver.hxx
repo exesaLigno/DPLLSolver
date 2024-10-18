@@ -1,6 +1,7 @@
 #include "dprintf.hxx"
 #include "cnf.hxx"
 #include "rules.hxx"
+#include <cmath>
 
 class Solver
 {
@@ -16,18 +17,25 @@ public:
     Status DPLLRecursive(CNF cnf, Literal propagate);
     Status DPLLLinear(CNF cnf);
 
+    uint64_t Complexity();
+
 private:
 
     Rule _rules = Rule::NONE;
     bool _removeTrivial();
     bool _removeSingular();
     bool _removePure();
+
+    uint64_t _complexity = 0;
 };
 
 Solver::Solver(Rule rules = Rule::NONE) : _rules(rules) { }
 
 Solver::Status Solver::DPLLRecursive(CNF cnf, Literal propagate = EmptyLiteral)
 {
+    _complexity++;
+    dprintf("Solving CNF of %d clauses, propagating = %d\n", cnf.ClausesCount(), propagate);
+
     CNF::ActionResult res = CNF::ActionResult::OK;
     if ((propagate != EmptyLiteral and (res = cnf.PropagateUnit(propagate)) != CNF::ActionResult::OK) or 
         (_removeTrivial() and (res = cnf.RemoveTrivialClauses()) != CNF::ActionResult::OK) or
@@ -42,10 +50,16 @@ exit:
         case CNF::ActionResult::EMPTY_CLAUSE_CREATED: return Status::UNSAT; // If empty clause was created, this branch is UNSAT
     }
 
-    if (DPLLRecursive(cnf, cnf.FirstLiteral()) == Status::SAT or DPLLRecursive(cnf, -cnf.FirstLiteral()) == Status::SAT) 
+    if ((not cnf.IsUnsatPropagation(cnf.FirstLiteral()) and DPLLRecursive(cnf, cnf.FirstLiteral()) == Status::SAT) or 
+        (not cnf.IsUnsatPropagation(-cnf.FirstLiteral()) and DPLLRecursive(cnf, -cnf.FirstLiteral()) == Status::SAT)) 
         return Status::SAT; // If one of sub-branches is SAT, current branch is SAT too
     
     return Status::UNSAT; // If all sub-branches are UNSAT, current branch is UNSAT too
+}
+
+uint64_t Solver::Complexity()
+{
+    return _complexity;
 }
 
 bool Solver::_removeTrivial()
