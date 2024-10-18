@@ -50,8 +50,11 @@ exit:
         case CNF::ActionResult::EMPTY_CLAUSE_CREATED: return Status::UNSAT; // If empty clause was created, this branch is UNSAT
     }
 
-    if ((not cnf.IsUnsatPropagation(cnf.FirstLiteral()) and DPLLRecursive(cnf, cnf.FirstLiteral()) == Status::SAT) or 
-        (not cnf.IsUnsatPropagation(-cnf.FirstLiteral()) and DPLLRecursive(cnf, -cnf.FirstLiteral()) == Status::SAT)) 
+    Literal to_propagate = cnf.FirstLiteral();
+    if (to_propagate < 0) to_propagate = -to_propagate;
+
+    if ((not cnf.IsUnsatPropagation(to_propagate) and DPLLRecursive(cnf, to_propagate) == Status::SAT) or 
+        (not cnf.IsUnsatPropagation(-to_propagate) and DPLLRecursive(cnf, -to_propagate) == Status::SAT)) 
         return Status::SAT; // If one of sub-branches is SAT, current branch is SAT too
     
     return Status::UNSAT; // If all sub-branches are UNSAT, current branch is UNSAT too
