@@ -1,5 +1,6 @@
 #pragma once
 #include <cstring>
+#include <list>
 #include "literal.hxx"
 
 class CNF
@@ -13,16 +14,19 @@ public:
 
     struct PureResult
     {
-        bool pure : 4;
-        bool negative : 4;
+        bool pure;
+        bool negative;
     };
 
     CNF();
     CNF(CNF& other); /// Copy constructor (necessary to save intermediate states)
     ~CNF();
 
+    bool IsUnsatPropagation(Literal literal); /// Checking if propagating of literal will cause UNSAT for this branch
+
     PureResult IsPure(Literal literal); /// Checking if literal pure or not
     Literal FindSingularClause(); /// Finding first single clause in CNF and returning literal from this clause
+    Literal FindPureLiteral(); /// Finding first pure literal in CNF
     Literal FirstLiteral(); /// Returning first literal in CNF
 
     ActionResult PropagateUnit(Literal literal); /// Removing all clauses with literal and all contra-literal occurancies from remaining clauses
@@ -32,12 +36,16 @@ public:
     ActionResult RemovePureLiterals(); /// Rule 2: Removing clauses with pure literals
 
     uint32_t ClausesCount();
+    uint32_t VariablesCount();
     std::string ToRawString();
     std::string ToString();
 
     friend class DIMACS;
 
 private:
+    bool _edited = false;
+    std::list<Literal> _single_literals = { };
+
     uintptr_t _cnf_data_size = 0; /// Current size of _cnf_data
     Literal* _cnf_data = nullptr; /// Clauses separated by EmptyLiteral (also after last element)
 
@@ -67,6 +75,11 @@ CNF::~CNF()
     }
 }
 
+bool CNF::IsUnsatPropagation(Literal literal)
+{
+    return false;
+}
+
 CNF::PureResult CNF::IsPure(Literal literal)
 {
     bool found = false;
@@ -85,18 +98,44 @@ CNF::PureResult CNF::IsPure(Literal literal)
 
 Literal CNF::FindSingularClause()
 {
-    bool first_literal_in_clause = true;
-
-    for (int i = 0; i < _cnf_data_size; i++)
+    // Propagate (single way to edit CNF) updating list of single literals, 
+    // so it is necessary to search in cycle only if CNF not edited
+    if (not _edited)
     {
-        if (first_literal_in_clause and _cnf_data[i + 1] == EmptyLiteral)
-            return _cnf_data[i];
+        _edited = true;
+        
+        bool first_literal_in_clause = true;
 
-        if (first_literal_in_clause)
-            first_literal_in_clause = false;
+        for (int i = 0; i < _cnf_data_size; i++)
+        {
+            if (first_literal_in_clause and _cnf_data[i + 1] == EmptyLiteral)
+                _single_literals.push_back(_cnf_data[i]);
 
-        if (_cnf_data[i] == EmptyLiteral)
-            first_literal_in_clause = true;
+            if (first_literal_in_clause)
+                first_literal_in_clause = false;
+
+            if (_cnf_data[i] == EmptyLiteral)
+                first_literal_in_clause = true;
+        }
+    }
+
+    Literal found = EmptyLiteral;
+    if (_single_literals.size() != 0)
+    {
+        found = _single_literals.back();
+        _single_literals.pop_back();
+    }
+
+    return found;
+}
+
+Literal CNF::FindPureLiteral()
+{
+    for (Literal literal = 1; literal <= _variables_count; literal++)
+    {
+        auto res = IsPure(literal);
+        if (res.pure)
+            return res.negative ? -literal : literal;
     }
 
     return EmptyLiteral;
@@ -112,53 +151,75 @@ Literal CNF::FirstLiteral()
 
 CNF::ActionResult CNF::PropagateUnit(Literal literal)
 {
-    bool skip_clause = false;
+    _edited = true;
 
-    for (int i = 0; i < _cnf_data_size and _cnf_data[i] != 0; i++)
-    {
-        if (_cnf_data[i] == literal)
-        {
-            skip_clause = true;
-            break;
-        }
-    }
+    int old_clause_size = 0;
+    int new_clause_size = 0;
+
+    bool clause_removed = false;
 
     int new_idx = 0;
 
     for (int old_idx = 0; old_idx < _cnf_data_size; old_idx++)
     {
-        bool clause_end = _cnf_data[old_idx] == EmptyLiteral;
+        old_clause_size++;
+        Literal current = _cnf_data[old_idx];
 
-        if (!skip_clause && _cnf_data[old_idx] != -literal)
+        bool clause_end = current == EmptyLiteral;
+
+        if (current == -literal) // Just skipping contra-literals
         {
-            Literal tmp = _cnf_data[old_idx];
             _cnf_data[old_idx] = EmptyLiteral;
-            _cnf_data[new_idx] = tmp;
 
-            if (_cnf_data[new_idx] == EmptyLiteral and (new_idx == 0 or _cnf_data[new_idx - 1] == EmptyLiteral))
-            {
-                dprintf("Empty clause created while removing literal %d\n", literal);
-                return ActionResult::EMPTY_CLAUSE_CREATED;
-            }
+            dprintf("Literal %d removed from clause: %s\n", -literal, ToRawString().c_str());
+        }
 
-            new_idx++;
+        else if (current == literal) // Deleting copied literals of this clause and skipping uncopied ending
+        {
+            while (new_idx > 0 and _cnf_data[new_idx - 1] != EmptyLiteral)
+                _cnf_data[--new_idx] = EmptyLiteral;
+        
+            while (old_idx < _cnf_data_size and _cnf_data[old_idx++] != EmptyLiteral)
+                _cnf_data[old_idx - 1] = EmptyLiteral;
+            
+            old_idx--;
+            clause_removed = true;
+            _clauses_count--;
+            clause_end = true;
+
+            dprintf("Whole clause with literal %d removed: %s\n", literal, ToRawString().c_str());
         }
 
         else
-            _cnf_data[old_idx] = EmptyLiteral;
+        {
+            _cnf_data[new_idx++] = current;
+            new_clause_size++;
+        }
 
         if (clause_end)
         {
-            skip_clause = false;
-
-            for (int i = old_idx + 1; i < _cnf_data_size and _cnf_data[i] != 0; i++)
+            if (not clause_removed)
             {
-                if (_cnf_data[i] == literal)
+                new_clause_size--;
+                old_clause_size--;
+
+                if (new_clause_size == 0)
                 {
-                    skip_clause = true;
-                    break;
+                    dprintf("Empty clause created while removing literal %d\n", literal);
+                    return ActionResult::EMPTY_CLAUSE_CREATED;
+                }
+
+                else if (new_clause_size == 1 and old_clause_size == 2)
+                {
+                    _single_literals.push_back(_cnf_data[new_idx - 2]);
+                    dprintf("Singular clause of literal %d created while removing literal %d, NOT ADDING\n", _cnf_data[new_idx - 1], literal);
                 }
             }
+            else
+                clause_removed = false;
+
+            new_clause_size = 0;
+            old_clause_size = 0;
         }
     }
 
@@ -177,13 +238,17 @@ CNF::ActionResult CNF::RemoveSingularClauses()
 {
     dprintf("Removing singular clauses\n", nullptr);
     Literal propagating = FindSingularClause();
-    while (true)
+    while (propagating != EmptyLiteral)
     {
+        dprintf("Removing literal %d: %s\n", propagating, ToRawString().c_str());
+
         ActionResult res = PropagateUnit(propagating);
+
+        dprintf("After removing: %s\n", ToRawString().c_str());
+
         if (res != ActionResult::OK) return res;
 
-        if ((propagating = FindSingularClause()) == EmptyLiteral)
-            break;
+        propagating = FindSingularClause();
     }
 
     return ActionResult::OK;
@@ -192,12 +257,29 @@ CNF::ActionResult CNF::RemoveSingularClauses()
 CNF::ActionResult CNF::RemovePureLiterals()
 {
     dprintf("Removing clauses with pure literals\n", nullptr);
+
+    Literal propagating = FindPureLiteral();
+    while (propagating != EmptyLiteral)
+    {
+        dprintf("Removing pure literal %d\n", propagating);
+
+        ActionResult res = PropagateUnit(propagating);
+        if (res != ActionResult::OK) return res;
+
+        propagating = FindPureLiteral();
+    }
+
     return ActionResult::OK;
 }
 
 uint32_t CNF::ClausesCount()
 {
     return _clauses_count;
+}
+
+uint32_t CNF::VariablesCount()
+{
+    return _variables_count;
 }
 
 std::string CNF::ToRawString()
@@ -209,8 +291,11 @@ std::string CNF::ToRawString()
         sprintf(buffer, "%d, ", _cnf_data[idx]);
         result = result.append(buffer);
     }
-    result.pop_back();
-    result.pop_back();
+    if (_cnf_data_size > 0)
+    {
+        result.pop_back();
+        result.pop_back();
+    }
     result = result.append("]");
     return result;
 }
