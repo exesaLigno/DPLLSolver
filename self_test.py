@@ -51,7 +51,7 @@ for num, test in enumerate(tests):
 print(' ' * 80, end='')
 print('\b' * 80, end='')
 
-print(f'Finished {len(tests)} tests in {duration / 1000000:.0f} ms')
+print(f'Finished {len(tests)} tests in {duration / 1000000:.0f} s')
 
 exited_normally = 0
 exited_abnormally = 0

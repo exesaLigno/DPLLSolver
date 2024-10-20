@@ -20,7 +20,7 @@ int main(int argc, char** argv)
         
         auto result = solver.Solve(cnf);
 
-        printf("Solved in %d steps (out of 2^%d)\n", solver.Complexity(), cnf.VariablesCount());
+        dprintf("Solved in %d steps (out of 2^%d)\n", solver.Complexity(), cnf.VariablesCount());
         
         switch (result)
         {

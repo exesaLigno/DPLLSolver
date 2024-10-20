@@ -232,16 +232,22 @@ CNF::ActionResult CNF::PropagateUnit(Literal literal)
                 new_clause_size--;
                 old_clause_size--;
 
-                if (new_clause_size == 0)
+                switch (new_clause_size)
                 {
-                    dprintf("Empty clause created while removing literal %d\n", literal);
-                    return ActionResult::EMPTY_CLAUSE_CREATED;
-                }
-
-                else if (new_clause_size == 1 and old_clause_size == 2)
-                {
-                    _single_literals.push_back(_cnf_data[new_idx - 2]);
-                    dprintf("Singular clause of literal %d created while removing literal %d\n", _cnf_data[new_idx - 1], literal);
+                    case 0:
+                    {
+                        dprintf("Empty clause created while removing literal %d\n", literal);
+                        return ActionResult::EMPTY_CLAUSE_CREATED;
+                    }
+                    
+                    case 1:
+                    {
+                        if (old_clause_size == 2)
+                        {
+                            _single_literals.push_back(_cnf_data[new_idx - 2]);
+                            dprintf("Singular clause of literal %d created while removing literal %d\n", _cnf_data[new_idx - 1], literal);
+                        }
+                    }
                 }
             }
             else
