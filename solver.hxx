@@ -138,12 +138,15 @@ Solver::Status Solver::_DPLLLinear(CNF initial_cnf)
 {
     Status result = Status::UNSAT;
 
-    CNF cnf = initial_cnf;
-
     int propagating_idx = 0;
-    int propagating_size = cnf.VariablesCount() + 1;
+    int propagating_size = initial_cnf.VariablesCount() + 1;
     Literal* propagating = new Literal[propagating_size] { 0 };
     CNF* cnfs = new CNF[propagating_size];
+    cnfs[0] = initial_cnf;
+
+    #define cnf cnfs[propagating_idx]
+    #define prev_cnf cnfs[propagating_idx - 1]
+    #define propagate propagating[propagating_idx]
 
     while (true)
     {
@@ -151,7 +154,7 @@ Solver::Status Solver::_DPLLLinear(CNF initial_cnf)
         dprintf("Solving CNF of %d clauses, propagating = %d\n%s\n", cnf.ClausesCount(), propagating[propagating_idx], cnf.ToString().c_str());
 
         CNF::ActionResult res = CNF::ActionResult::OK;
-        if ((propagating[propagating_idx] != EmptyLiteral and (res = cnf.PropagateUnit(propagating[propagating_idx])) != CNF::ActionResult::OK) or 
+        if ((propagate != EmptyLiteral and (res = cnf.PropagateUnit(propagate)) != CNF::ActionResult::OK) or 
             (_removeSingular() and (res = cnf.RemoveSingularClauses()) != CNF::ActionResult::OK) or
             (_removePure() and (res = cnf.RemovePureLiterals()) != CNF::ActionResult::OK)) 
             goto exit;
@@ -165,9 +168,9 @@ Solver::Status Solver::_DPLLLinear(CNF initial_cnf)
 
         else if (res == CNF::ActionResult::EMPTY_CLAUSE_CREATED)
         {
-            while (propagating_idx > 0 and propagating[propagating_idx] < 0)
+            while (propagating_idx > 0 and propagate < 0)
             {
-                propagating[propagating_idx] = EmptyLiteral;
+                propagate = EmptyLiteral;
                 propagating_idx--;
             }
 
@@ -177,27 +180,32 @@ Solver::Status Solver::_DPLLLinear(CNF initial_cnf)
                 break;
             }
 
-            propagating[propagating_idx] = -propagating[propagating_idx];
-            cnf = cnfs[propagating_idx - 1];
+            propagate = -propagate;
+            cnf = prev_cnf;
 
             dprintf("Empty clause created, trying another branch (idx = %d, literal = %d)\n", propagating_idx, propagating[propagating_idx]);
 
             continue;
         }
 
-        cnfs[propagating_idx] = cnf;
         propagating_idx++;
+        cnf = prev_cnf;
 
-        if (propagating[propagating_idx] == EmptyLiteral)
+        if (propagate == EmptyLiteral)
         {
             Literal first_literal = cnf.FirstLiteral();
             if (first_literal < 0) first_literal = -first_literal;
 
-            propagating[propagating_idx] = first_literal;
+            propagate = first_literal;
         }
     }
 
     delete[] propagating;
+    delete[] cnfs;
+
+    #undef cnf
+    #undef prev_cnf
+    #undef propagate
 
     return result;
 }
