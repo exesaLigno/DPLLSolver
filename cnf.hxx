@@ -20,6 +20,7 @@ public:
 
     CNF();
     CNF(CNF& other); /// Copy constructor (necessary to save intermediate states)
+    CNF& operator=(CNF& other);
     ~CNF();
 
     bool IsUnsatPropagation(Literal literal); /// Checking if propagating of literal will cause UNSAT for this branch
@@ -63,6 +64,34 @@ CNF::CNF(CNF& other)
 
     _variables_count = other._variables_count;
     _clauses_count = other._clauses_count;
+
+    _edited = false;
+    _single_literals =  { };
+}
+
+CNF& CNF::operator=(CNF& other)
+{
+    if (this == &other)
+        return *this;
+
+    if (_cnf_data)
+    {
+        delete[] _cnf_data;
+        _cnf_data = nullptr;
+        _cnf_data_size = 0;
+    }
+
+    _cnf_data_size = other._cnf_data_size;
+    _cnf_data = new Literal[_cnf_data_size] { 0 };
+    memcpy(_cnf_data, other._cnf_data, _cnf_data_size * sizeof(Literal));
+
+    _variables_count = other._variables_count;
+    _clauses_count = other._clauses_count;
+
+    _edited = false;
+    _single_literals = { };
+
+    return *this;
 }
 
 CNF::~CNF()
@@ -171,7 +200,7 @@ CNF::ActionResult CNF::PropagateUnit(Literal literal)
         {
             _cnf_data[old_idx] = EmptyLiteral;
 
-            dprintf("Literal %d removed from clause: %s\n", -literal, ToRawString().c_str());
+            dprintf("Literal %d removed from clause\n", -literal);
         }
 
         else if (current == literal) // Deleting copied literals of this clause and skipping uncopied ending
@@ -187,7 +216,7 @@ CNF::ActionResult CNF::PropagateUnit(Literal literal)
             _clauses_count--;
             clause_end = true;
 
-            dprintf("Whole clause with literal %d removed: %s\n", literal, ToRawString().c_str());
+            dprintf("Whole clause with literal %d removed\n", literal);
         }
 
         else
@@ -212,7 +241,7 @@ CNF::ActionResult CNF::PropagateUnit(Literal literal)
                 else if (new_clause_size == 1 and old_clause_size == 2)
                 {
                     _single_literals.push_back(_cnf_data[new_idx - 2]);
-                    dprintf("Singular clause of literal %d created while removing literal %d, NOT ADDING\n", _cnf_data[new_idx - 1], literal);
+                    dprintf("Singular clause of literal %d created while removing literal %d\n", _cnf_data[new_idx - 1], literal);
                 }
             }
             else
@@ -240,17 +269,18 @@ CNF::ActionResult CNF::RemoveSingularClauses()
     Literal propagating = FindSingularClause();
     while (propagating != EmptyLiteral)
     {
-        dprintf("Removing literal %d: %s\n", propagating, ToRawString().c_str());
+        dprintf("Removing literal %d\n", propagating);
 
         ActionResult res = PropagateUnit(propagating);
 
-        dprintf("After removing: %s\n", ToRawString().c_str());
+        dprintf("Literal %d removed\n", propagating);
 
         if (res != ActionResult::OK) return res;
 
         propagating = FindSingularClause();
     }
 
+    dprintf("Singular clauses removed\n", nullptr);
     return ActionResult::OK;
 }
 

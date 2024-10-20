@@ -31,7 +31,7 @@ for num, test in enumerate(tests):
     counter = f' {num}/{tests_count} ({test.split('/')[-1]})'
     timers = f'{time_passed:.2f} s, ETA: {time_left:.2f} s '
     string = counter + ' ' * (80 - len(counter) - len(timers)) + timers
-    string = '\x1b[42m' + string[:split_no] + '\x1b[47m' + string[split_no:] + '\x1b[0m'
+    string = '\x1b[42m' + string[:split_no] + '\x1b[30;47m' + string[split_no:] + '\x1b[0m'
 
     print(string, end='')
     print('\b' * len(string), end='')

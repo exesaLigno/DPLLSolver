@@ -10,7 +10,7 @@ int main(int argc, char** argv)
         dprintf("Filename isn't provided!\nUsage: %s [filename, ..]\n", argv[0]);
 
     int err_count = 0;
-    auto solver = Solver(Rule::REMOVE_SINGULAR /*| Rule::REMOVE_PURE*/);
+    auto solver = Solver(Rule::REMOVE_SINGULAR /*| Rule::RECURSIVE_SOLVING*/);
 
     for (int f_no = 1; f_no < argc; f_no++)
     {
@@ -18,7 +18,9 @@ int main(int argc, char** argv)
 
         dprintf("Loaded %s\nCNF consist of %d clauses\n%s\n", argv[f_no], cnf.ClausesCount(), cnf.ToString().c_str());
         
-        auto result = solver.DPLLRecursive(cnf);
+        auto result = solver.Solve(cnf);
+
+        printf("Solved in %d steps (out of 2^%d)\n", solver.Complexity(), cnf.VariablesCount());
         
         switch (result)
         {
