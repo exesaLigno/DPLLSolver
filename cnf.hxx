@@ -44,8 +44,7 @@ public:
     friend class DIMACS;
 
 private:
-    bool _edited = false;
-    std::list<Literal> _single_literals = { };
+    Literal _single_literal = EmptyLiteral;
 
     uintptr_t _cnf_data_size = 0; /// Current size of _cnf_data
     Literal* _cnf_data = nullptr; /// Clauses separated by EmptyLiteral (also after last element)
@@ -65,8 +64,7 @@ CNF::CNF(CNF& other)
     _variables_count = other._variables_count;
     _clauses_count = other._clauses_count;
 
-    _edited = false;
-    _single_literals =  { };
+    _single_literal = EmptyLiteral;
 }
 
 CNF& CNF::operator=(CNF& other)
@@ -88,8 +86,7 @@ CNF& CNF::operator=(CNF& other)
     _variables_count = other._variables_count;
     _clauses_count = other._clauses_count;
 
-    _edited = false;
-    _single_literals = { };
+    _single_literal = EmptyLiteral;
 
     return *this;
 }
@@ -129,16 +126,17 @@ Literal CNF::FindSingularClause()
 {
     // Propagate (single way to edit CNF) updating list of single literals, 
     // so it is necessary to search in cycle only if CNF not edited
-    if (not _edited)
-    {
-        _edited = true;
-        
+    if (_single_literal == EmptyLiteral)
+    {        
         bool first_literal_in_clause = true;
 
         for (int i = 0; i < _cnf_data_size; i++)
         {
             if (first_literal_in_clause and _cnf_data[i + 1] == EmptyLiteral)
-                _single_literals.push_back(_cnf_data[i]);
+            {
+                _single_literal = _cnf_data[i];
+                break;
+            }
 
             if (first_literal_in_clause)
                 first_literal_in_clause = false;
@@ -149,10 +147,10 @@ Literal CNF::FindSingularClause()
     }
 
     Literal found = EmptyLiteral;
-    if (_single_literals.size() != 0)
+    if (_single_literal != EmptyLiteral)
     {
-        found = _single_literals.back();
-        _single_literals.pop_back();
+        found = _single_literal;
+        _single_literal = EmptyLiteral;
     }
 
     return found;
@@ -180,8 +178,6 @@ Literal CNF::FirstLiteral()
 
 CNF::ActionResult CNF::PropagateUnit(Literal literal)
 {
-    _edited = true;
-
     int old_clause_size = 0;
     int new_clause_size = 0;
 
@@ -244,8 +240,8 @@ CNF::ActionResult CNF::PropagateUnit(Literal literal)
                     {
                         if (old_clause_size == 2)
                         {
-                            _single_literals.push_back(_cnf_data[new_idx - 2]);
-                            dprintf("Singular clause of literal %d created while removing literal %d\n", _cnf_data[new_idx - 1], literal);
+                            _single_literal = _cnf_data[new_idx - 2];
+                            dprintf("Singular clause of literal %d created while removing literal %d\n", _cnf_data[new_idx - 2], literal);
                         }
                     }
                 }
