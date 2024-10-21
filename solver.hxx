@@ -20,6 +20,8 @@ public:
 
 private:
 
+    Literal _getLiteral(CNF& cnf);
+
     Status _DPLLRecursive(CNF cnf, Literal propagate);
     Status _DPLLLinear_test(CNF cnf);
     Status _DPLLLinear(CNF cnf);
@@ -33,6 +35,13 @@ private:
 };
 
 Solver::Solver(Rule rules = Rule::NONE) : _rules(rules) { }
+
+Literal Solver::_getLiteral(CNF& cnf)
+{
+    Literal t = cnf.FirstLiteral();
+    if (t < 0) t = -t;
+    return t;
+}
 
 Solver::Status Solver::_DPLLRecursive(CNF cnf, Literal propagate = EmptyLiteral)
 {
@@ -52,7 +61,7 @@ exit:
         case CNF::ActionResult::EMPTY_CLAUSE_CREATED: return Status::UNSAT; // If empty clause was created, this branch is UNSAT
     }
 
-    Literal to_propagate = cnf.FirstLiteral();
+    Literal to_propagate = _getLiteral(cnf);
     if (to_propagate < 0) to_propagate = -to_propagate;
 
     if ((not cnf.IsUnsatPropagation(to_propagate) and _DPLLRecursive(cnf, to_propagate) == Status::SAT) or 
@@ -126,10 +135,7 @@ Solver::Status Solver::_DPLLLinear(CNF initial_cnf)
 
         if (propagate == EmptyLiteral)
         {
-            Literal first_literal = cnf.FirstLiteral();
-            if (first_literal < 0) first_literal = -first_literal;
-
-            propagate = first_literal;
+            propagate = _getLiteral(cnf);
         }
     }
 

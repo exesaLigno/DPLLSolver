@@ -29,6 +29,7 @@ public:
     Literal FindSingularClause(); /// Finding first single clause in CNF and returning literal from this clause
     Literal FindPureLiteral(); /// Finding first pure literal in CNF
     Literal FirstLiteral(); /// Returning first literal in CNF
+    Literal LastLiteral(); /// Returning last literal in CNF
 
     ActionResult PropagateUnit(Literal literal); /// Removing all clauses with literal and all contra-literal occurancies from remaining clauses
 
@@ -158,6 +159,14 @@ Literal CNF::FindPureLiteral()
             return res.negative ? -literal : literal;
     }
 
+    return EmptyLiteral;
+}
+
+Literal CNF::FirstLiteral()
+{
+    if (_cnf_data_size > 0 and _cnf_data[0] != EmptyLiteral)
+        return _cnf_data[0];
+    
     return EmptyLiteral;
 }
 
