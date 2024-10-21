@@ -69,12 +69,14 @@ Solver::Status Solver::_DPLLLinear(CNF initial_cnf)
     int propagating_idx = 0;
     int propagating_size = initial_cnf.VariablesCount() + 1;
     Literal* propagating = new Literal[propagating_size] { 0 };
+    bool* prop_checked_both = new bool[propagating_size] { false };
     CNF* cnfs = new CNF[propagating_size];
     cnfs[0] = initial_cnf;
 
     #define cnf cnfs[propagating_idx]
     #define prev_cnf cnfs[propagating_idx - 1]
     #define propagate propagating[propagating_idx]
+    #define checked_both prop_checked_both[propagating_idx]
 
     while (true)
     {
@@ -96,9 +98,10 @@ Solver::Status Solver::_DPLLLinear(CNF initial_cnf)
 
         else if (res == CNF::ActionResult::EMPTY_CLAUSE_CREATED)
         {
-            while (propagating_idx > 0 and propagate < 0)
+            while (propagating_idx > 0 and checked_both)
             {
                 propagate = EmptyLiteral;
+                checked_both = false;
                 propagating_idx--;
             }
 
@@ -109,6 +112,7 @@ Solver::Status Solver::_DPLLLinear(CNF initial_cnf)
             }
 
             propagate = -propagate;
+            checked_both = true;
             cnf = prev_cnf;
 
             dprintf("Empty clause created, trying another branch (idx = %d, literal = %d)\n", propagating_idx, propagating[propagating_idx]);
@@ -118,6 +122,7 @@ Solver::Status Solver::_DPLLLinear(CNF initial_cnf)
 
         propagating_idx++;
         cnf = prev_cnf;
+        checked_both = false;
 
         if (propagate == EmptyLiteral)
         {
@@ -129,11 +134,13 @@ Solver::Status Solver::_DPLLLinear(CNF initial_cnf)
     }
 
     delete[] propagating;
+    delete[] prop_checked_both;
     delete[] cnfs;
 
     #undef cnf
     #undef prev_cnf
     #undef propagate
+    #undef checked_both
 
     return result;
 }
