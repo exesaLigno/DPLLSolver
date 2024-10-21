@@ -133,10 +133,7 @@ Literal CNF::FindSingularClause()
         for (int i = 0; i < _cnf_data_size; i++)
         {
             if (first_literal_in_clause and _cnf_data[i + 1] == EmptyLiteral)
-            {
-                _single_literal = _cnf_data[i];
-                break;
-            }
+                return _cnf_data[i];
 
             if (first_literal_in_clause)
                 first_literal_in_clause = false;
@@ -146,12 +143,8 @@ Literal CNF::FindSingularClause()
         }
     }
 
-    Literal found = EmptyLiteral;
-    if (_single_literal != EmptyLiteral)
-    {
-        found = _single_literal;
-        _single_literal = EmptyLiteral;
-    }
+    Literal found = _single_literal;
+    _single_literal = EmptyLiteral;
 
     return found;
 }
